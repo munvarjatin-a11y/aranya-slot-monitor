@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 5
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -44,6 +44,7 @@ jobs:
         run: node ./aranya-monitor.mjs
 
       - name: Save monitor state
+        shell: bash
         run: |
           if [ -n "$(git status --porcelain state.json)" ]; then
             git config user.name "github-actions[bot]"
