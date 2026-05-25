@@ -1,4 +1,6 @@
 import fs from "node:fs/promises";
+import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { fileURLToPath } from "node:url";
@@ -121,6 +123,117 @@ function splitSetCookie(header) {
   return header.split(/,(?=\s*[^;,\s]+=)/g).map((cookie) => cookie.trim());
 }
 
+function normalizeHeaders(headers) {
+  const out = {};
+  if (!headers) return out;
+
+  if (headers instanceof Headers) {
+    for (const [key, value] of headers.entries()) out[key] = value;
+    return out;
+  }
+
+  for (const [key, value] of Object.entries(headers)) {
+    out[key] = value;
+  }
+  return out;
+}
+
+function responseHeaders(rawHeaders) {
+  const lower = {};
+  for (const [key, value] of Object.entries(rawHeaders)) {
+    lower[key.toLowerCase()] = value;
+  }
+  return {
+    get(name) {
+      const value = lower[name.toLowerCase()];
+      return Array.isArray(value) ? value.join(", ") : (value ?? null);
+    },
+    getSetCookie() {
+      const value = lower["set-cookie"];
+      if (!value) return [];
+      return Array.isArray(value) ? value : [value];
+    },
+  };
+}
+
+async function httpFetch(url, options = {}, redirects = 0) {
+  const target = new URL(url);
+  const isHttps = target.protocol === "https:";
+  const body =
+    options.body instanceof URLSearchParams ? options.body.toString() : options.body ?? null;
+  const headers = normalizeHeaders(options.headers);
+  if (body && !Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) {
+    headers["Content-Length"] = Buffer.byteLength(body);
+  }
+
+  const timeoutMs = Number.parseInt(env("REQUEST_TIMEOUT_MS", "45000"), 10) || 45000;
+  const response = await new Promise((resolve, reject) => {
+    const request = (isHttps ? https : http).request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: `${target.pathname}${target.search}`,
+        method: options.method || "GET",
+        headers,
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const buffer = Buffer.concat(chunks);
+          resolve({
+            status: res.statusCode,
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            url,
+            headers: responseHeaders(res.headers),
+            async text() {
+              return buffer.toString("utf8");
+            },
+          });
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error(`Request timed out after ${timeoutMs}ms: ${url}`));
+    });
+    request.on("error", reject);
+    if (body) request.write(body);
+    request.end();
+  });
+
+  const location = response.headers.get("location");
+  if (
+    [301, 302, 303, 307, 308].includes(response.status) &&
+    location &&
+    redirects < 5
+  ) {
+    const nextUrl = new URL(location, url).toString();
+    const nextOptions =
+      response.status === 303
+        ? { ...options, method: "GET", body: null }
+        : options;
+    return httpFetch(nextUrl, nextOptions, redirects + 1);
+  }
+
+  return response;
+}
+
+async function fetchWithRetries(url, options = {}) {
+  const attempts = Number.parseInt(env("REQUEST_RETRIES", "3"), 10) || 3;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await httpFetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await delay(1000 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 class SiteSession {
   constructor() {
     this.cookies = new Map();
@@ -148,7 +261,7 @@ class SiteSession {
     headers.set("Accept-Language", headers.get("Accept-Language") ?? "en-IN,en;q=0.9");
     if (this.cookies.size) headers.set("Cookie", this.cookieHeader());
 
-    const response = await fetch(url, { ...options, headers, redirect: "follow" });
+    const response = await fetchWithRetries(url, { ...options, headers });
     this.saveCookies(response.headers);
     return response;
   }
@@ -482,7 +595,7 @@ async function sendTwilioWhatsApp(message) {
     body.set("Body", message);
   }
 
-  const response = await fetch(
+  const response = await fetchWithRetries(
     `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
     {
       method: "POST",
@@ -505,7 +618,7 @@ async function sendCloudWhatsApp(message) {
   if (!token || !phoneNumberId || !to) return false;
 
   const version = env("WHATSAPP_GRAPH_VERSION", "v20.0");
-  const response = await fetch(
+  const response = await fetchWithRetries(
     `https://graph.facebook.com/${version}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -532,7 +645,7 @@ async function sendWebhook(message) {
   const url = env("WHATSAPP_WEBHOOK_URL");
   if (!url) return false;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetries(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: message, message }),
@@ -576,8 +689,6 @@ function saveStateEntry(state, key, nextEntry) {
 }
 
 async function runOnce() {
-  if (typeof fetch !== "function") throw new Error("Node.js 18 or newer is required.");
-
   const dates = targetDates();
   if (!dates.length) {
     console.log("No target dates to check after filters.");
