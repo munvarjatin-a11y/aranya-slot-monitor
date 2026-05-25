@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       TREK_TARGETS: "17:112:Kudremukha Trek;24:113:Nethravathi Trek"
       WEEKENDS_ONLY: "true"
       CHECK_NEXT_DAYS: "15"

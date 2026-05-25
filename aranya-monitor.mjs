@@ -659,6 +659,16 @@ async function delay(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function describeError(error) {
+  const parts = [];
+  let current = error;
+  while (current) {
+    parts.push(current.stack || current.message || String(current));
+    current = current.cause;
+  }
+  return parts.join("\nCaused by: ");
+}
+
 async function main() {
   await loadEnvFile();
   if (process.argv.includes("--test-whatsapp")) {
@@ -677,7 +687,7 @@ async function main() {
     try {
       await runOnce();
     } catch (error) {
-      console.error(`Check failed: ${error.message}`);
+      console.error(`Check failed: ${describeError(error)}`);
       process.exitCode = 1;
       if (!loop) break;
     }
