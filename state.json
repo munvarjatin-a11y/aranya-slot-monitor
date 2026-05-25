@@ -1,0 +1,74 @@
+{
+  "17:112:30-05-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": true,
+    "slots": []
+  },
+  "17:112:31-05-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": true,
+    "slots": []
+  },
+  "17:112:06-06-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": false,
+    "slots": [
+      {
+        "time": "06:00 A.M TO 11.00A.M",
+        "available": 0,
+        "capacity": 300
+      }
+    ]
+  },
+  "17:112:07-06-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 1,
+    "blocked": false,
+    "slots": [
+      {
+        "time": "06:00 A.M TO 11.00A.M",
+        "available": 1,
+        "capacity": 300
+      }
+    ]
+  },
+  "24:113:30-05-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": true,
+    "slots": []
+  },
+  "24:113:31-05-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": true,
+    "slots": []
+  },
+  "24:113:06-06-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": false,
+    "slots": [
+      {
+        "time": "06:00 AM TO 11:00 AM",
+        "available": 0,
+        "capacity": 300
+      }
+    ]
+  },
+  "24:113:07-06-2026": {
+    "checkedAt": "2026-05-25T20:14:47.111Z",
+    "maxAvailable": 0,
+    "blocked": false,
+    "slots": [
+      {
+        "time": "06:00 AM TO 11:00 AM",
+        "available": 0,
+        "capacity": 300
+      }
+    ]
+  }
+}
