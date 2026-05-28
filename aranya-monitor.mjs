@@ -563,6 +563,18 @@ function buildMessage({ districtLabel, trek, date, slots }) {
   ].join("\n");
 }
 
+function buildTemplateVariables({ trek, date, slots }) {
+  const lines = slots
+    .filter((slot) => slot.available > 0)
+    .map((slot) => `${slot.available}/${slot.capacity}`)
+    .join(", ");
+  return {
+    1: trek.name,
+    2: date,
+    3: lines,
+  };
+}
+
 function relevantSlots(slots) {
   const capacityFilter = env("CAPACITY_FILTER")
     .split(",")
@@ -589,7 +601,7 @@ async function sendTwilioWhatsApp(message) {
     body.set("ContentSid", contentSid);
     body.set(
       "ContentVariables",
-      env("TWILIO_CONTENT_VARIABLES") || JSON.stringify({ 1: message }),
+      env("TWILIO_CONTENT_VARIABLES") || JSON.stringify({ 1: message, 2: "", 3: "" }),
     );
   } else {
     body.set("Body", message);
@@ -665,6 +677,23 @@ async function notify(message) {
   return "console";
 }
 
+async function notifySlotAlert(details) {
+  const previousVariables = process.env.TWILIO_CONTENT_VARIABLES;
+  if (env("TWILIO_CONTENT_SID")) {
+    process.env.TWILIO_CONTENT_VARIABLES = JSON.stringify(buildTemplateVariables(details));
+  }
+
+  try {
+    return await notify(buildMessage(details));
+  } finally {
+    if (previousVariables === undefined) {
+      delete process.env.TWILIO_CONTENT_VARIABLES;
+    } else {
+      process.env.TWILIO_CONTENT_VARIABLES = previousVariables;
+    }
+  }
+}
+
 function summarize(slots) {
   if (!slots.length) return "no slot counts found";
   return slots.map((slot) => `${slot.time} ${slot.available}/${slot.capacity}`).join("; ");
@@ -680,7 +709,9 @@ function saveStateEntry(state, key, nextEntry) {
     previous &&
     previous.maxAvailable === nextEntry.maxAvailable &&
     previous.blocked === nextEntry.blocked &&
-    slotsChanged(previous.slots, nextEntry.slots) === false
+    slotsChanged(previous.slots, nextEntry.slots) === false &&
+    previous.notifiedAt === nextEntry.notifiedAt &&
+    previous.lastNotifiedAvailable === nextEntry.lastNotifiedAvailable
   ) {
     return;
   }
@@ -729,11 +760,14 @@ async function runOnce() {
       );
       const slots = relevantSlots(allSlots);
       const maxAvailable = slots.reduce((max, slot) => Math.max(max, slot.available), 0);
+      const alreadyNotified =
+        previous?.notifiedAt && previous?.lastNotifiedAvailable >= maxAvailable;
       const shouldNotify =
         maxAvailable > 0 &&
         (envBool("ALERT_ON_EVERY_POSITIVE") ||
           previous?.maxAvailable === 0 ||
-          (!previous && envBool("ALERT_ON_FIRST_POSITIVE", false)));
+          (!previous && envBool("ALERT_ON_FIRST_POSITIVE", false)) ||
+          (envBool("ALERT_ON_UNNOTIFIED_POSITIVE", true) && !alreadyNotified));
 
       const ignored =
         allSlots.length && slots.length !== allSlots.length
@@ -742,15 +776,19 @@ async function runOnce() {
       console.log(`${target.trek.name} ${date}: ${summarize(slots)}${ignored}`);
 
       if (shouldNotify) {
-        const message = buildMessage({
+        const channel = await notifySlotAlert({
           districtLabel: target.districtLabel,
           trek: target.trek,
           date,
           slots,
         });
-        const channel = await notify(message);
         notifications += 1;
         console.log(`${target.trek.name} ${date}: notified via ${channel}`);
+      } else if (maxAvailable > 0) {
+        const reason = alreadyNotified
+          ? `already notified at ${previous.notifiedAt}`
+          : "positive slot did not match alert rules";
+        console.log(`${target.trek.name} ${date}: not notifying (${reason})`);
       }
 
       saveStateEntry(state, key, {
@@ -758,6 +796,10 @@ async function runOnce() {
         maxAvailable,
         blocked: false,
         slots,
+        notifiedAt: shouldNotify ? checkedAt : previous?.notifiedAt,
+        lastNotifiedAvailable: shouldNotify
+          ? maxAvailable
+          : previous?.lastNotifiedAvailable,
       });
     }
   }
