@@ -747,7 +747,9 @@ async function runOnce() {
 
       if (blockedDates.has(date)) {
         saveStateEntry(state, key, { checkedAt, maxAvailable: 0, blocked: true, slots: [] });
-        console.log(`${target.trek.name} ${date}: blocked by site`);
+        if (envBool("SHOW_BLOCKED_DATES")) {
+          console.log(`${target.trek.name} ${date}: blocked by site`);
+        }
         continue;
       }
 
