@@ -31,6 +31,31 @@ Test WhatsApp:
 node .\aranya-monitor.mjs --test-whatsapp
 ```
 
+## Telegram Alerts
+
+Telegram is the easiest free alert channel.
+
+1. In Telegram, message `@BotFather`.
+2. Send `/newbot`.
+3. Choose a bot name and username.
+4. Copy the bot token into `.env` as `TELEGRAM_BOT_TOKEN`.
+5. Send any message to your new bot.
+6. Open this URL in a browser, replacing `<TOKEN>`:
+
+```text
+https://api.telegram.org/bot<TOKEN>/getUpdates
+```
+
+7. Find your numeric `chat.id` and put it in `.env` as `TELEGRAM_CHAT_ID`.
+
+Test:
+
+```powershell
+node .\aranya-monitor.mjs --test-whatsapp
+```
+
+The test command uses the same notification path, so Telegram will be used first if configured.
+
 Run one check:
 
 ```powershell

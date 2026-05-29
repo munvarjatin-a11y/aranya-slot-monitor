@@ -667,7 +667,30 @@ async function sendWebhook(message) {
   return true;
 }
 
+async function sendTelegram(message) {
+  const token = env("TELEGRAM_BOT_TOKEN");
+  const chatId = env("TELEGRAM_CHAT_ID");
+  if (!token || !chatId) return false;
+
+  const response = await fetchWithRetries(
+    `https://api.telegram.org/bot${token}/sendMessage`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        disable_web_page_preview: true,
+      }),
+    },
+  );
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Telegram failed: HTTP ${response.status} ${text}`);
+  return true;
+}
+
 async function notify(message) {
+  if (await sendTelegram(message)) return "telegram";
   if (await sendTwilioWhatsApp(message)) return "twilio";
   if (await sendCloudWhatsApp(message)) return "whatsapp-cloud";
   if (await sendWebhook(message)) return "webhook";
